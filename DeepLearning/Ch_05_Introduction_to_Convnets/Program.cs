@@ -7,6 +7,21 @@ namespace Ch_05_Introduction_to_Convnets
 {
     class Program
     {
+        CNTK.Function m_network;
+        CNTK.Function m_lossFunction;
+        CNTK.Function m_accuracyFunction;
+        CNTK.Trainer m_trainer;
+        CNTK.Evaluator m_evaluator;
+
+        CNTK.Variable m_imageTensor;
+        CNTK.Variable m_labelTensor;
+        CNTK.DeviceDescriptor m_computeDevice;
+
+        float[][] m_trainImages;
+        float[][] m_testImages;
+        float[][] m_trainLabels;
+        float[][] m_testLabels;
+
         static void Main()
         {
             new Program().Run();
@@ -18,45 +33,45 @@ namespace Ch_05_Introduction_to_Convnets
             {
                 System.IO.Compression.ZipFile.ExtractToDirectory("mnist_data.zip", ".");
             }
-            train_images = Util.load_binary_file("train_images.bin", 60000, 28 * 28);
-            test_images = Util.load_binary_file("test_images.bin", 10000, 28 * 28);
-            train_labels = Util.load_binary_file("train_labels.bin", 60000, 10);
-            test_labels = Util.load_binary_file("test_labels.bin", 60000, 10);
+            m_trainImages = Util.load_binary_file("train_images.bin", 60000, 28 * 28);
+            m_testImages = Util.load_binary_file("test_images.bin", 10000, 28 * 28);
+            m_trainLabels = Util.load_binary_file("train_labels.bin", 60000, 10);
+            m_testLabels = Util.load_binary_file("test_labels.bin", 60000, 10);
             Console.WriteLine("Done with loading data\n");
         }
 
 
-        void create_network()
+        void CreateNetwork()
         {
-            computeDevice = Util.get_compute_device();
-            Console.WriteLine("Compute Device: " + computeDevice.AsString());
+            m_computeDevice = Util.get_compute_device();
+            Console.WriteLine("Compute Device: " + m_computeDevice.AsString());
 
-            image_tensor = CNTK.Variable.InputVariable(CNTK.NDShape.CreateNDShape(new int[] { 28, 28, 1 }), CNTK.DataType.Float);
-            label_tensor = CNTK.Variable.InputVariable(CNTK.NDShape.CreateNDShape(new int[] { 10 }), CNTK.DataType.Float);
+            m_imageTensor = CNTK.Variable.InputVariable(CNTK.NDShape.CreateNDShape(new int[] { 28, 28, 1 }), CNTK.DataType.Float);
+            m_labelTensor = CNTK.Variable.InputVariable(CNTK.NDShape.CreateNDShape(new int[] { 10 }), CNTK.DataType.Float);
 
-            network = image_tensor;
-            network = Util.Convolution2DWithReLU(network, 32, new int[] { 3, 3 }, computeDevice);
-            network = CNTK.CNTKLib.Pooling(network, CNTK.PoolingType.Max, new int[] { 2, 2 }, new int[] { 2 });
-            network = Util.Convolution2DWithReLU(network, 64, new int[] { 3, 3 }, computeDevice);
-            network = CNTK.CNTKLib.Pooling(network, CNTK.PoolingType.Max, new int[] { 2, 2 }, new int[] { 2 });
-            network = Util.Convolution2DWithReLU(network, 64, new int[] { 3, 3 }, computeDevice);
-            network = Util.Dense(network, 64, computeDevice);
-            network = CNTK.CNTKLib.ReLU(network);
-            network = Util.Dense(network, 10, computeDevice);
+            m_network = m_imageTensor;
+            m_network = Util.Convolution2DWithReLU(m_network, 32, new int[] { 3, 3 }, m_computeDevice);
+            m_network = CNTK.CNTKLib.Pooling(m_network, CNTK.PoolingType.Max, new int[] { 2, 2 }, new int[] { 2 });
+            m_network = Util.Convolution2DWithReLU(m_network, 64, new int[] { 3, 3 }, m_computeDevice);
+            m_network = CNTK.CNTKLib.Pooling(m_network, CNTK.PoolingType.Max, new int[] { 2, 2 }, new int[] { 2 });
+            m_network = Util.Convolution2DWithReLU(m_network, 64, new int[] { 3, 3 }, m_computeDevice);
+            m_network = Util.Dense(m_network, 64, m_computeDevice);
+            m_network = CNTK.CNTKLib.ReLU(m_network);
+            m_network = Util.Dense(m_network, 10, m_computeDevice);
 
-            Util.log_number_of_parameters(network);
+            Util.log_number_of_parameters(m_network);
 
-            loss_function = CNTK.CNTKLib.CrossEntropyWithSoftmax(network.Output, label_tensor);
-            accuracy_function = CNTK.CNTKLib.ClassificationError(network.Output, label_tensor);
+            m_lossFunction = CNTK.CNTKLib.CrossEntropyWithSoftmax(m_network.Output, m_labelTensor);
+            m_accuracyFunction = CNTK.CNTKLib.ClassificationError(m_network.Output, m_labelTensor);
 
-            var parameterVector = new CNTK.ParameterVector((System.Collections.ICollection)network.Parameters());
+            var parameterVector = new CNTK.ParameterVector((System.Collections.ICollection)m_network.Parameters());
             var learner = CNTK.CNTKLib.AdamLearner(parameterVector, new CNTK.TrainingParameterScheduleDouble(0.001, 1), new CNTK.TrainingParameterScheduleDouble(0.99, 1));
-            trainer = CNTK.CNTKLib.CreateTrainer(network, loss_function, accuracy_function, new CNTK.LearnerVector() { learner });
-            evaluator = CNTK.CNTKLib.CreateEvaluator(accuracy_function);
+            m_trainer = CNTK.CNTKLib.CreateTrainer(m_network, m_lossFunction, m_accuracyFunction, new CNTK.LearnerVector() { learner });
+            m_evaluator = CNTK.CNTKLib.CreateEvaluator(m_accuracyFunction);
 
         }
 
-        void train_network()
+        void TrainNetwork()
         {
             int epochs = 5;
             int batch_size = 64;
@@ -70,10 +85,10 @@ namespace Ch_05_Introduction_to_Convnets
                 while (pos < train_indices.Length)
                 {
                     var pos_end = Math.Min(pos + batch_size, train_indices.Length);
-                    var minibatch_images = Util.get_tensors(image_tensor.Shape, train_images, train_indices, pos, pos_end, computeDevice);
-                    var minibatch_labels = Util.get_tensors(label_tensor.Shape, train_labels, train_indices, pos, pos_end, computeDevice);
-                    var feed_dictionary = new feed_t() { { image_tensor, minibatch_images }, { label_tensor, minibatch_labels } };
-                    trainer.TrainMinibatch(feed_dictionary, false, computeDevice);
+                    var minibatch_images = Util.get_tensors(m_imageTensor.Shape, m_trainImages, train_indices, pos, pos_end, m_computeDevice);
+                    var minibatch_labels = Util.get_tensors(m_labelTensor.Shape, m_trainLabels, train_indices, pos, pos_end, m_computeDevice);
+                    var feed_dictionary = new feed_t() { { m_imageTensor, minibatch_images }, { m_labelTensor, minibatch_labels } };
+                    m_trainer.TrainMinibatch(feed_dictionary, false, m_computeDevice);
                     pos = pos_end;
                 }
 
@@ -81,13 +96,13 @@ namespace Ch_05_Introduction_to_Convnets
                 var accuracy = 0.0;
                 var num_batches = 0;
                 pos = 0;
-                while (pos < test_images.Length)
+                while (pos < m_testImages.Length)
                 {
-                    var pos_end = Math.Min(pos + batch_size, test_images.Length);
-                    var minibatch_images = Util.get_tensors(image_tensor.Shape, test_images, pos, pos_end, computeDevice);
-                    var minibatch_labels = Util.get_tensors(label_tensor.Shape, test_labels, pos, pos_end, computeDevice);
-                    var feed_dictionary = new test_feed_t() { { image_tensor, minibatch_images }, { label_tensor, minibatch_labels } };
-                    var minibatch_accuracy = evaluator.TestMinibatch(feed_dictionary, computeDevice);
+                    var pos_end = Math.Min(pos + batch_size, m_testImages.Length);
+                    var minibatch_images = Util.get_tensors(m_imageTensor.Shape, m_testImages, pos, pos_end, m_computeDevice);
+                    var minibatch_labels = Util.get_tensors(m_labelTensor.Shape, m_testLabels, pos, pos_end, m_computeDevice);
+                    var feed_dictionary = new test_feed_t() { { m_imageTensor, minibatch_images }, { m_labelTensor, minibatch_labels } };
+                    var minibatch_accuracy = m_evaluator.TestMinibatch(feed_dictionary, m_computeDevice);
                     accuracy += minibatch_accuracy;
                     pos = pos_end;
                     num_batches++;
@@ -100,23 +115,8 @@ namespace Ch_05_Introduction_to_Convnets
         void Run()
         {
             LoadData();
-            create_network();
-            train_network();
+            CreateNetwork();
+            TrainNetwork();
         }
-
-        CNTK.Function network;
-        CNTK.Function loss_function;
-        CNTK.Function accuracy_function;
-        CNTK.Trainer trainer;
-        CNTK.Evaluator evaluator;
-
-        CNTK.Variable image_tensor;
-        CNTK.Variable label_tensor;
-        CNTK.DeviceDescriptor computeDevice;
-
-        float[][] train_images;
-        float[][] test_images;
-        float[][] train_labels;
-        float[][] test_labels;
     }
 }
